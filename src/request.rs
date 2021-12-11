@@ -1,8 +1,7 @@
 extern crate reqwest;
 extern crate scraper;
 
-use scraper::Html;
-use scraper::Selector;
+use scraper::{Html, Selector};
 
 use crate::lib::TestCase;
 use crate::request::cache::{cache_cases, check_cache};
@@ -11,6 +10,7 @@ pub mod cache;
 
 #[tokio::main]
 pub async fn parse_cases(problem_num: &str) -> Result<Vec<TestCase>, Box<dyn std::error::Error>> {
+    // Check if cached data exists
     match check_cache(problem_num) {
         Ok(test_cases) => {
             if !test_cases.is_empty() {
@@ -20,30 +20,36 @@ pub async fn parse_cases(problem_num: &str) -> Result<Vec<TestCase>, Box<dyn std
         Err(err) => return Err(err),
     }
 
-    let input = "#sample-input-";
-    let output = "#sample-output-";
     let mut test_cases: Vec<TestCase> = Vec::new();
-    let url = format!("{}{}", "https://www.acmicpc.net/problem/", problem_num);
+    let url = format!("https://www.acmicpc.net/problem/{}", problem_num);
     let resp = reqwest::get(url).await?.text().await?;
 
     let fragment = Html::parse_fragment(&resp);
-    let mut i = 1;
-    loop {
-        let input_id = format!("{}{}", input, i);
-        let output_id = format!("{}{}", output, i);
-        let input_data = parse_data(&input_id, &fragment);
-        let output_data = parse_data(&output_id, &fragment);
+    let num_data = get_num_data(&fragment);
+    for i in num_data {
+        let input_id = format!("#sample-input-{}", i);
+        let output_id = format!("#sample-input-{}", i);
 
-        if input_data.is_ok() && output_data.is_ok() {
-            test_cases.push(TestCase::new(input_data.unwrap(), output_data.unwrap()));
-        } else {
-            break;
-        }
-        i += 1;
+        // TODO: Better error handling
+        let input_data = match parse_data(&input_id, &fragment) {
+            Ok(data) => data,
+            Err(error) => panic!(error),
+        };
+        let output_data = match parse_data(&output_id, &fragment) {
+            Ok(data) => data,
+            Err(error) => panic!(error),
+        };
+
+        let test_case = TestCase::new(input_data, output_data);
+        test_cases.push(test_case);
     }
     cache_cases(problem_num, &test_cases);
-
     Ok(test_cases)
+}
+
+fn get_num_data(fragment: &Html) -> usize {
+    let selector = Selector::parse(".sampledata").unwrap();
+    fragment.select(&selector).count() / 2
 }
 
 fn parse_data(css_id: &str, fragment: &Html) -> Result<String, Box<dyn std::error::Error>> {
