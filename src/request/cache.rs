@@ -1,48 +1,49 @@
-extern crate home;
+extern crate directories;
 
 use crate::lib::TestCase;
+use directories::BaseDirs;
+use path::{Path, PathBuf};
 use regex::Regex;
-use std::path::PathBuf;
-use std::{fs, process};
+use std::{fs, path, process};
 
 pub fn cache_cases(
     problem_num: &str,
     test_cases: &Vec<TestCase>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut path = home::home_dir().unwrap();
-    path.push("Library");
-    path.push("Caches");
-    path.push("TestDrive");
-    path.push(problem_num);
-    fs::create_dir_all(&path)?;
+    let cache_dir = get_cache_dir(problem_num);
+    fs::create_dir_all(&cache_dir)?;
 
-    let input = "-input";
-    let output = "-output";
     for (i, case) in test_cases.iter().enumerate() {
-        path.push(format!("{}{}", i + 1, input));
-        path.set_extension("txt");
-        fs::write(&path, &case.input());
-        path.pop();
-        path.push(format!("{}{}", i + 1, output));
-        path.set_extension("txt");
-        fs::write(&path, &case.output());
-        path.pop();
+        let mut input_file = Path::new(&cache_dir).join(format!("{}-input", i + 1));
+        input_file.set_extension("txt");
+        fs::write(&input_file, &case.input());
+        let mut output_file = Path::new(&cache_dir).join(format!("{}-output", i + 1));
+        output_file.set_extension("txt");
+        fs::write(&output_file, &case.output());
     }
     Ok(())
 }
 
-pub fn check_cache(problem_num: &str) -> Result<Vec<TestCase>, Box<dyn std::error::Error>> {
-    let mut path = home::home_dir().unwrap();
-    let mut test_cases: Vec<TestCase> = Vec::new();
-    path.push("Library");
-    path.push("Caches");
-    path.push("TestDrive");
-    path.push(problem_num);
+fn get_cache_dir(problem_num: &str) -> PathBuf {
+    let mut cache_dir = PathBuf::new();
+    if let Some(base_dirs) = BaseDirs::new() {
+        cache_dir = [base_dirs.cache_dir(), "TestDrive", problem_num]
+            .iter()
+            .collect();
+    } else {
+        panic!("Cannot find cache directory")
+    }
 
+    cache_dir
+}
+
+pub fn check_cache(problem_num: &str) -> Result<Vec<TestCase>, Box<dyn std::error::Error>> {
+    let cache_dir = get_cache_dir(problem_num);
     fs::create_dir_all(&path)?;
 
+    let mut test_cases: Vec<TestCase> = Vec::new();
     let re = Regex::new(r"\d+-(input|output)\.txt").unwrap();
-    let mut test_files = fs::read_dir(&path)?
+    let mut test_files = fs::read_dir(&cache_dir)?
         .into_iter()
         .filter(|p| p.is_ok())
         .map(|p| p.unwrap().path())
