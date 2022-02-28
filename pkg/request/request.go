@@ -45,7 +45,10 @@ func getHTMLPage(problem, webSite string) (*goquery.Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Get(url + problem)
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", url+problem, nil)
+	req.Header.Set("User-Agent", "TestDrive") // User-Agent must be set to avoid 403 errors in some websites
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println("Something went wrong while making HTTP request: ", err)
 		return nil, err
