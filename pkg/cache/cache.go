@@ -2,6 +2,7 @@ package cache
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/james0248/TestDrive.git/pkg/request"
 	"io/ioutil"
@@ -46,7 +47,30 @@ func WriteCache(webSite, problem string, testCases []request.TestCase) error {
 }
 
 func ReadCache(webSite, problem string) ([]request.TestCase, error) {
-	return nil, nil
+	cacheDir, err := getCacheDir(webSite)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("%s.json", problem)
+	cacheFile := filepath.Join(cacheDir, filename)
+	if _, err := os.Stat(cacheFile); err == nil {
+		cache := &Cache{}
+		file, err := ioutil.ReadFile(cacheFile)
+		if err != nil {
+			return nil, err
+		}
+
+		err = json.Unmarshal(file, cache)
+		if err != nil {
+			return nil, err
+		}
+		return cache.TestCases, nil
+	} else if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	} else {
+		return nil, err
+	}
 }
 
 func getCacheDir(webSite string) (string, error) {
