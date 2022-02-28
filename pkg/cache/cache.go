@@ -1,14 +1,26 @@
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/james0248/TestDrive.git/pkg/request"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 )
 
+type Cache struct {
+	Count     int
+	TestCases []request.TestCase
+}
+
+func newCache(testCases []request.TestCase) *Cache {
+	return &Cache{Count: len(testCases), TestCases: testCases}
+}
+
+// TODO: Change saving format to JSON
 func WriteCache(webSite, problem string, testCases []request.TestCase) error {
-	cacheDir, err := getCacheDir(webSite, problem)
+	cacheDir, err := getCacheDir(webSite)
 	if err != nil {
 		return err
 	}
@@ -18,29 +30,18 @@ func WriteCache(webSite, problem string, testCases []request.TestCase) error {
 		return err
 	}
 
-	for i, tc := range testCases {
-		infName := fmt.Sprintf("in-%d", i+1)
-		inf, err := os.Create(filepath.Join(cacheDir, infName))
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = inf.WriteString(tc.Input)
-		if err != nil {
-			panic(err)
-		}
-
-		outfName := fmt.Sprintf("out-%d", i+1)
-		outf, err := os.Create(filepath.Join(cacheDir, outfName))
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = outf.WriteString(tc.Output)
-		if err != nil {
-			panic(err)
-		}
+	cache := newCache(testCases)
+	doc, err := json.Marshal(cache)
+	if err != nil {
+		return err
 	}
+
+	filename := fmt.Sprintf("%s.json", problem)
+	err = ioutil.WriteFile(filepath.Join(cacheDir, filename), doc, 0644)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -48,12 +49,12 @@ func ReadCache(webSite, problem string) ([]request.TestCase, error) {
 	return nil, nil
 }
 
-func getCacheDir(webSite, problem string) (string, error) {
+func getCacheDir(webSite string) (string, error) {
 	if cacheDir, err := os.UserCacheDir(); err != nil {
 		fmt.Println("No local cache directory found: ", err)
 		return "", err
 	} else {
-		p := filepath.Join(cacheDir, "TestDrive", webSite, problem)
+		p := filepath.Join(cacheDir, "TestDrive", webSite)
 		return p, nil
 	}
 }
