@@ -2,7 +2,12 @@
 ## What does it do?
 TestDrive automatically scrapes input/output data from [BOJ(Baekjoon Online Judge)](https://www.acmicpc.net/) and runs tests for your executable binary file!
 
-## How to use
+## Discalimer
+I have changed the language from Rust to Go for several reasons (development performance, etc)
+So the **How to use** part is not currently working, and I haven't worked on the command line interface. 
+I will be working on it ASAP ☺️
+
+## How to use (Not available)
 1. Clone this repo
 2. Build with [Rust](https://www.rust-lang.org/) with `cargo build --release`
 3. `test_drive` gets 2 arguments. First, the path to the binary, second the problem number. Following is the example running `test_drive` for [#1000 (A+B)](https://www.acmicpc.net/problem/1000) at BOJ.
