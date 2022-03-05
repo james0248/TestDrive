@@ -13,7 +13,7 @@ type TestCase struct {
 	Output string
 }
 
-func ParseTestCases(problem, webSite string) ([]TestCase, error) {
+func ParseTestCases(webSite, problem string) ([]TestCase, error) {
 	doc, err := getHTMLPage(problem, webSite)
 	if err != nil {
 		fmt.Println("Failed to get HTML page")
@@ -68,7 +68,7 @@ func getWebsiteUrl(webSite string) (string, error) {
 	case "BOJ":
 		return "https://www.acmicpc.net/problem/", nil
 	default:
-		return "", errors.New("unsupported problem solving website")
+		return "", errors.New("unsupported problem solving website " + webSite)
 	}
 }
 
