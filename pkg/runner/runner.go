@@ -1,10 +1,12 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"github.com/james0248/TestDrive.git/pkg/cache"
 	"github.com/james0248/TestDrive.git/pkg/request"
 	"io"
+	"os"
 	"os/exec"
 )
 
@@ -44,6 +46,11 @@ func Run(codePath, language, website, problemNumber string, options []string) {
 			fmt.Println(err)
 		}
 	}
+
+	err = removeBinary()
+	if err != nil {
+		fmt.Println("Error occured while cleaning up")
+	}
 }
 
 func test(testCase request.TestCase, binaryPath string) error {
@@ -74,10 +81,24 @@ func compile(codePath, language string, options []string) ([]byte, error) {
 	var compileOptions []string
 	if language == "C++" {
 		compiler = "g++"
-		compileOptions = append([]string{codePath, "-o", "main"}, options...)
+		compileOptions = append([]string{codePath, "-o", "Main"}, options...)
 	}
 	// Compile code if neccesary
 	cmd := exec.Command(compiler, compileOptions...)
 	output, err := cmd.CombinedOutput()
 	return output, err
+}
+
+func removeBinary() error {
+	if _, err := os.Stat("./Main"); err == nil {
+		err := os.Remove("./Main")
+		if err != nil {
+			return err
+		}
+	} else if errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else {
+		return err
+	}
+	return nil
 }
