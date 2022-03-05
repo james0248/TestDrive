@@ -3,61 +3,87 @@ package runner
 import (
 	"errors"
 	"fmt"
+	"github.com/gosuri/uilive"
 	"github.com/james0248/TestDrive.git/pkg/cache"
 	"github.com/james0248/TestDrive.git/pkg/request"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
-func Run(codePath, language, website, problemNumber string, options []string) {
-	output, err := compile(codePath, language, options)
+type runner struct {
+	w                  *uilive.Writer
+	codePath, language string
+	website, problemId string
+	binaryPath         string
+	testCases          []request.TestCase
+}
+
+func NewRunner(codePath, language, website, problemId string) *runner {
+	writer := uilive.New()
+	r := &runner{
+		w:         writer,
+		codePath:  codePath,
+		language:  language,
+		website:   website,
+		problemId: problemId,
+	}
+	return r
+}
+
+func (r *runner) Run(options []string) {
+	output, err := r.compile(options)
 	if err != nil {
 		fmt.Println("Error occured while compiling code")
 		fmt.Printf("%s\n", output)
 		panic(err)
 	}
 
-	// Read test cases from cache
-	testCases, err := cache.ReadCache(website, problemNumber)
+	r.getTestCases()
 	if err != nil {
-		fmt.Println("Error occured while reading cached test cases")
 		panic(err)
 	}
-	// Cache miss
-	if testCases == nil {
-		testCases, err = request.ParseTestCases(website, problemNumber)
-		if err != nil {
-			fmt.Println("Error occured while fetching test cases from " + website)
-			panic(err)
-		}
 
-		err = cache.WriteCache(website, problemNumber, testCases)
-		if err != nil {
-			fmt.Println("Error occured while writing cache")
-			panic(err)
+	// Run all tests
+	results := make(chan *runResult)
+	for index := range r.testCases {
+		go func(i int, tc request.TestCase) {
+			err := r.test(i, tc, results)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}(index, r.testCases[index])
+	}
+
+	// Observe
+	for i := 0; i < len(r.testCases); i++ {
+		result := <-results
+		if result.ok {
+			fmt.Println("Test #" + strconv.Itoa(result.index+1) + " passed")
+		} else {
+			fmt.Println("Test #" + strconv.Itoa(result.index+1) + " failed: " + result.runtimeErr)
+			fmt.Println("Input:")
+			fmt.Print(r.testCases[result.index].Input)
+			fmt.Println("True Output:")
+			fmt.Println(r.testCases[result.index].Output)
+			fmt.Println("Your Output:")
+			fmt.Print(result.output)
 		}
 	}
 
-	//count := len(testCases)
-	for _, tc := range testCases {
-		err := test(tc, "./main")
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
-
-	err = removeBinary()
+	err = r.removeBinary()
 	if err != nil {
 		fmt.Println("Error occured while cleaning up")
 	}
 }
 
-func test(testCase request.TestCase, binaryPath string) error {
-	cmd := exec.Command(binaryPath)
+func (r *runner) test(index int, testCase request.TestCase, results chan *runResult) error {
+	cmd := exec.Command(r.binaryPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		// Error handling will be tedious because it occured before execution
+		panic(err)
 	}
 
 	defer stdin.Close()
@@ -65,23 +91,50 @@ func test(testCase request.TestCase, binaryPath string) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		results <- NewRunResult(index, false, "Undiscovered", output)
 		return err
 	}
 
 	if string(output) == testCase.Output {
-		fmt.Println("Test Passed!")
+		results <- NewRunResult(index, true, "", output)
 	} else {
-		fmt.Println("Wrong Answer")
+		results <- NewRunResult(index, false, "Wrong Answer", output)
 	}
 	return nil
 }
 
-func compile(codePath, language string, options []string) ([]byte, error) {
+func (r *runner) getTestCases() error {
+	// Read test cases from cache
+	testCases, err := cache.ReadCache(r.website, r.problemId)
+	if err != nil {
+		fmt.Println("Error occured while reading cached test cases")
+		return err
+	}
+	// Cache miss
+	if testCases == nil {
+		testCases, err = request.ParseTestCases(r.website, r.problemId)
+		if err != nil {
+			fmt.Println("Error occured while fetching test cases from " + r.website)
+			return err
+		}
+
+		err = cache.WriteCache(r.website, r.problemId, testCases)
+		if err != nil {
+			fmt.Println("Error occured while writing cache")
+			return err
+		}
+	}
+	r.testCases = testCases
+	return nil
+}
+
+func (r *runner) compile(options []string) ([]byte, error) {
 	compiler := ""
 	var compileOptions []string
-	if language == "C++" {
+	if r.language == "C++" {
 		compiler = "g++"
-		compileOptions = append([]string{codePath, "-o", "Main"}, options...)
+		r.binaryPath = "./Main"
+		compileOptions = append([]string{r.codePath, "-o", r.binaryPath}, options...)
 	}
 	// Compile code if neccesary
 	cmd := exec.Command(compiler, compileOptions...)
@@ -89,9 +142,9 @@ func compile(codePath, language string, options []string) ([]byte, error) {
 	return output, err
 }
 
-func removeBinary() error {
-	if _, err := os.Stat("./Main"); err == nil {
-		err := os.Remove("./Main")
+func (r *runner) removeBinary() error {
+	if _, err := os.Stat(r.binaryPath); err == nil {
+		err := os.Remove(r.binaryPath)
 		if err != nil {
 			return err
 		}
