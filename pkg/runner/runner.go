@@ -3,27 +3,23 @@ package runner
 import (
 	"errors"
 	"fmt"
-	"github.com/gosuri/uilive"
 	"github.com/james0248/TestDrive.git/pkg/cache"
 	"github.com/james0248/TestDrive.git/pkg/request"
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 )
 
 type runner struct {
-	w                  *uilive.Writer
 	codePath, language string
 	website, problemId string
 	binaryPath         string
 	testCases          []request.TestCase
+	logger             *ResultLogger
 }
 
 func NewRunner(codePath, language, website, problemId string) *runner {
-	writer := uilive.New()
 	r := &runner{
-		w:         writer,
 		codePath:  codePath,
 		language:  language,
 		website:   website,
@@ -40,37 +36,22 @@ func (r *runner) Run(options []string) {
 		panic(err)
 	}
 
-	r.getTestCases()
+	err = r.getTestCases()
 	if err != nil {
 		panic(err)
 	}
 
+	r.logger.Start()
 	// Run all tests
-	results := make(chan *runResult)
 	for index := range r.testCases {
 		go func(i int, tc request.TestCase) {
-			err := r.test(i, tc, results)
+			err := r.test(i, tc)
 			if err != nil {
 				fmt.Println(err)
 			}
 		}(index, r.testCases[index])
 	}
-
-	// Observe
-	for i := 0; i < len(r.testCases); i++ {
-		result := <-results
-		if result.ok {
-			fmt.Println("Test #" + strconv.Itoa(result.index+1) + " passed")
-		} else {
-			fmt.Println("Test #" + strconv.Itoa(result.index+1) + " failed: " + result.runtimeErr)
-			fmt.Println("Input:")
-			fmt.Print(r.testCases[result.index].Input)
-			fmt.Println("True Output:")
-			fmt.Println(r.testCases[result.index].Output)
-			fmt.Println("Your Output:")
-			fmt.Print(result.output)
-		}
-	}
+	r.logger.WaitForCompletion()
 
 	err = r.removeBinary()
 	if err != nil {
@@ -78,7 +59,7 @@ func (r *runner) Run(options []string) {
 	}
 }
 
-func (r *runner) test(index int, testCase request.TestCase, results chan *runResult) error {
+func (r *runner) test(index int, testCase request.TestCase) error {
 	cmd := exec.Command(r.binaryPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -91,14 +72,14 @@ func (r *runner) test(index int, testCase request.TestCase, results chan *runRes
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		results <- NewRunResult(index, false, "Undiscovered", output)
+		r.logger.ReportResult(NewRunResult(index, false, "Undiscovered", output, testCase.Output))
 		return err
 	}
 
 	if string(output) == testCase.Output {
-		results <- NewRunResult(index, true, "", output)
+		r.logger.ReportResult(NewRunResult(index, true, "", output, testCase.Output))
 	} else {
-		results <- NewRunResult(index, false, "Wrong Answer", output)
+		r.logger.ReportResult(NewRunResult(index, false, "WA", output, testCase.Output))
 	}
 	return nil
 }
@@ -125,6 +106,7 @@ func (r *runner) getTestCases() error {
 		}
 	}
 	r.testCases = testCases
+	r.logger = NewLogger(len(testCases))
 	return nil
 }
 
