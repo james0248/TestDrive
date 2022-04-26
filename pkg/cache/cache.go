@@ -19,7 +19,6 @@ func newCache(testCases []request.TestCase) *Cache {
 	return &Cache{Count: len(testCases), TestCases: testCases}
 }
 
-// TODO: Change saving format to JSON
 func WriteCache(webSite, problem string, testCases []request.TestCase) error {
 	cacheDir, err := getCacheDir(webSite)
 	if err != nil {
